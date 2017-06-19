@@ -26,7 +26,6 @@ class Ja {
         styles={},
     }) {
 
-        // is custom element defined already?
         if (this.isOpen(name)) {
             class JaCompo extends HTMLElement {
                 constructor() {
@@ -94,6 +93,7 @@ class Ja {
         }
     }
 
+    // is custom element defined already?
     static isOpen(component) {
         return !customElements.get(component)
     }
