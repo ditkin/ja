@@ -1,3 +1,6 @@
+/*
+ * BEGIN Library Code
+ */
 class Ja {
     constructor(options) {
         options = options || {}
@@ -7,8 +10,8 @@ class Ja {
         window.JaRadio = new Radio()
     }
 
-    static startRouter() {
-        window.Router = new Router()
+    static startRouter(options) {
+        window.JaRouter = new Router(options)
     }
 
     static use({
@@ -34,12 +37,17 @@ class Ja {
                 connectedCallback() {
 
                     // transfer over methods
-                    Object.assign(this, methods)
+                    Object.assign(this, this.methods)
+
+                    // transfer over methods
+                    Object.assign(this, this.state)
 
                     // transfer styles
                     Object.keys(styles).forEach(styleName => {
                         this[`${styleName}Style`] = styles[styleName]
                     })
+
+                    this.render()
 
                     // hook up lifecycle callbacks
                     onCreate && onCreate.call(this)
@@ -53,11 +61,29 @@ class Ja {
                 }
 
                 attributeChangedCallback(name, oldVal, newVal) {
-                    console.log(arguments);
+                    try {
+                        newVal = JSON.parse(newVal)
+                    } catch(e) {}
+
+                    this[name] = newVal
+                }
+
+                /**
+                 * To be used when passing non-string/number props to child element
+                 * in a string literal
+                 */
+                parse(strings, ...props) {
+                    let html = strings[0]
+                    const latterStrings = strings.slice(1)
+
+                    props.forEach((prop, idx) => {
+                        html += `${JSON.stringify(prop)}${latterStrings[idx]}`
+                    })
+                    return html
                 }
 
                 render() {
-                    this.innerHTML = html.call(this);
+                    this.innerHTML = html.call(this)
                 }
             }
 
@@ -105,6 +131,13 @@ class Radio {
 class Router {
 }
 
+/*
+ * END Library Code
+ */
+
+/*
+ * BEGIN Test Code
+ */
 Ja.startRadio()
 
 Ja.use({
@@ -125,10 +158,13 @@ Ja.use({
         },
     },
     onCreate() {
-        JaRadio.trigger('new:cat', {
-            name: 'feona',
-            hungry: this.state.hungry
+        //this.querySelector(`[name="${this.name}"]`).addEventListener('click', ()=> {
+            //JaRadio.trigger('cat:meowed', this)
+        //})
+        this.firstElementChild.addEventListener('click', ()=> {
+            JaRadio.trigger('cat:meowed', this)
         })
+
     },
     onAttach() {
     },
@@ -136,7 +172,7 @@ Ja.use({
         console.log('BYE!')
     },
     html() { return `
-        <div style=${this.mainStyle()}>${this.state.action}</div>
+        <div style=${this.mainStyle()} name=${this.name}>${this.name}</div>
     `},
     styles: {
         main: () => (`"
@@ -153,27 +189,35 @@ Ja.use({
         cats: [],
     },
     methods: {
-        addCat(cat) {
-            this.state.cats.push(cat)
+        feedCat(cat) {
+            const catIndex = this.cats.findIndex(elem => elem.name === cat.name)
+            if (catIndex > -1) {
+                this.cats[catIndex].hungry = false
+                this.cats[catIndex].thickness = 'YUGE'
+            }
             this.render()
         },
     },
     onCreate() {
-        JaRadio.on('new:cat', this.addCat, this)
+        JaRadio.on('cat:meowed', this.feedCat, this)
     },
     onDestroy() {
-        JaRadio.off('new:cat')
+        JaRadio.off('cat:meowed')
     },
     html() {
-        let htmlString = ''
-        this.state.cats.forEach(cat => {
-            htmlString += `
-                <feona-cat style=${this.penStyle()}
-                ${cat.hungry ? 'hungry' : ''}
-                fur=${cat.fur}>
+        let htmlString = `<div style=${this.penStyle()}>`
+
+        this.cats.forEach(cat => {
+            htmlString += this.parse`
+                <feona-cat
+                    hungry=${cat.hungry}
+                    fur=${cat.fur}>
                 </feona-cat>
             `
         })
+
+        htmlString += '</div>'
+
         return htmlString
     },
     styles: {
