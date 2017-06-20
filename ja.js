@@ -16,6 +16,7 @@ class Ja {
 
     static use({
         name,
+        shaded,
         props=[],
         state={},
         methods={},
@@ -26,14 +27,21 @@ class Ja {
         styles={},
     }) {
 
-        if (this.isOpen(name)) {
+        if (this.isValidCustomElemName(name)) {
+
+            /**
+             * Dynamically generated class based on provided component config
+             */
             class JaCompo extends HTMLElement {
                 constructor() {
                     super()
-                    Object.assign(this, this.constructor.prototype)
-                }
 
-                connectedCallback() {
+                    Object.assign(this, this.constructor.prototype)
+
+                    // create shadowDOM if privacy enabled
+                    if (this.shaded) {
+                        this.shade = this.attachShadow({ mode: 'open' })
+                    }
 
                     // transfer over methods
                     Object.assign(this, this.methods)
@@ -42,34 +50,41 @@ class Ja {
                     Object.assign(this, this.state)
 
                     // transfer styles
-                    Object.keys(styles).forEach(styleName => {
-                        this[`${styleName}Style`] = styles[styleName]
+                    Object.keys(this.styles).forEach(styleName => {
+                        this[`${styleName}Style`] = this.styles[styleName]
                     })
 
                     this.render()
 
-                    // hook up lifecycle callbacks
-                    onCreate && onCreate.call(this)
+                    this.onCreate && this.onCreate()
+                }
 
-                    this.disconnectedCallback = onDestroy
+                connectedCallback() {
+                    this.onAttach && this.onAttach()
+                }
+
+                disconnectedCallback() {
+                    this.onDestroy && this.onDestroy()
                 }
 
                 static get observedAttributes() {
-                    const attrs = [].concat( props, Object.keys(state) )
-                    return [ ... new Set(attrs) ]
+                    return [ ... new Set(props) ]
                 }
 
-                attributeChangedCallback(name, oldVal, newVal) {
+                attributeChangedCallback(name, oldVal, val) {
                     try {
-                        newVal = JSON.parse(newVal)
-                    } catch(e) {}
+                        val = JSON.parse(val)
+                    }
+                    catch(e) {
+                    }
 
-                    this[name] = newVal
+                    this[name] = val
                 }
 
                 /**
-                 * To be used when passing non-string/number props to child element
-                 * in a string literal
+                 * To be used when:
+                 *  1) passing non-string/number props to child element
+                 *  2) rendering custom elements (but only necessary if their name was transformed)
                  */
                 parse(strings, ...props) {
                     let html = strings[0]
@@ -82,20 +97,37 @@ class Ja {
                 }
 
                 render() {
-                    this.innerHTML = html.call(this)
+                    if (this.shade) {
+                        this.shade.innerHTML = this.html()
+                    } else {
+                        this.innerHTML = this.html()
+                    }
                 }
             }
 
             Object.assign(JaCompo.prototype, arguments[0])
 
             customElements.define(name, JaCompo)
-
         }
     }
 
     // is custom element defined already?
     static isOpen(component) {
         return !customElements.get(component)
+    }
+
+    // is name worthy of a custom element?
+    static ensureCustomElemName(name) {
+        try {
+            const cutName = name.split('-')
+            const nameValid = this.isOpen(name) && cutName.length > 1 && cutName[0] !== ''
+
+            return nameValid
+        }
+        catch (e) {
+            console.err('Please specify a name for your component in format "a-b"')
+            return false
+        }
     }
 }
 
@@ -141,32 +173,24 @@ class Router {
 Ja.startRadio()
 
 Ja.use({
-    name: 'feona-cat',
-    props: [ 'fur', 'paws' ],
+    type: 'cat',
+    shaded: true,
+    props: [ 'name', 'fur', 'paws' ],
     state: {
         hungry: false,
-        action: 'loafing',
+        fur: { white: 50, black: 50 },
     },
     methods: {
-        eat() {
-            this.state.action = 'eating'
-            this.state.hungry = false
-        },
         meow() {
-            this.state.action = 'meowing'
-            console.log(`${this.state.hungry ? 'MEOW' : 'purr'}`)
-        },
+            JaRadio.trigger('cat:meowed', this)
+        }
     },
     onCreate() {
-        //this.querySelector(`[name="${this.name}"]`).addEventListener('click', ()=> {
-            //JaRadio.trigger('cat:meowed', this)
-        //})
-        this.firstElementChild.addEventListener('click', ()=> {
-            JaRadio.trigger('cat:meowed', this)
-        })
-
     },
     onAttach() {
+        this.shade.firstElementChild.addEventListener('click', () => {
+            this.meow()
+        })
     },
     onDestroy() {
         console.log('BYE!')
@@ -184,17 +208,16 @@ Ja.use({
 
 
 Ja.use({
-    name: 'play-pen',
+    type: 'play-pen',
+    shaded: true,
     state: {
         cats: [],
     },
     methods: {
         feedCat(cat) {
-            const catIndex = this.cats.findIndex(elem => elem.name === cat.name)
-            if (catIndex > -1) {
-                this.cats[catIndex].hungry = false
-                this.cats[catIndex].thickness = 'YUGE'
-            }
+            const catIdx = this.cats.findIndex(elem => elem.name === cat.name)
+            this.cats[catIdx] = cat
+
             this.render()
         },
     },
@@ -206,16 +229,23 @@ Ja.use({
     },
     html() {
         let htmlString = `<div style=${this.penStyle()}>`
-
-        this.cats.forEach(cat => {
-            htmlString += this.parse`
-                <feona-cat
-                    hungry=${cat.hungry}
-                    fur=${cat.fur}>
-                </feona-cat>
+        this.state.cats.forEach(cat => {
+            htmlString += `
+                <p style=${this.fedStyle()}>
+                    ${cat.name}
+                    ${cat.fur}
+                    <br>
+                </p>
             `
         })
-
+        this.state.cats.forEach(cat => {
+            htmlString += `
+                <cat style=${this.penStyle()}
+                ${cat.hungry ? 'hungry' : ''}
+                fur=${cat.fur}>
+                </cat>
+            `
+        })
         htmlString += '</div>'
 
         return htmlString
@@ -224,6 +254,10 @@ Ja.use({
         pen: () => (`"
             color: red;
             margin: 100px 30px 50px;
+        "`),
+        fed: () => (`"
+            color: blue;
+            border: 2px solid brown;
         "`),
     }
 })
