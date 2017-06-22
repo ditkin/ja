@@ -6,21 +6,21 @@
  * BEGIN Library Code
  */
 class Ja {
-    constructor(options) {
+    constructor (options) {
         options = options || {}
     }
 
-    static startRadio() {
+    static startRadio () {
         window.JaRadio = new Radio()
     }
 
-    static startRouter(options) {
+    static startRouter (options) {
         window.JaRouter = new Router(options)
     }
 
-    static getCustomElemClassDefinition() {
+    static getCustomElemClassDefinition () {
         return class JaCompo extends HTMLElement {
-            constructor() {
+            constructor () {
                 super()
 
                 Object.assign(this, this.constructor.prototype)
@@ -41,24 +41,43 @@ class Ja {
                     this[`${styleName}Style`] = this.styles[styleName]
                 })
 
+                // enable watched props
+                this.defineProps()
+
                 this.render()
 
                 this.onCreate && this.onCreate()
             }
 
-            connectedCallback() {
+            defineProps () {
+                Object.keys(this.watch).forEach(propName => {
+                    this[`_${propName}`] = this[propName]
+
+                    Object.defineProperty(this, propName, {
+                        get() {
+                            return this[`_${propName}`]
+                        },
+                        set(val) {
+                            this[`_${propName}`] = val
+                            this.watch[propName].call(this)
+                        },
+                    })
+                })
+            }
+
+            connectedCallback () {
                 this.onAttach && this.onAttach()
             }
 
-            disconnectedCallback() {
+            disconnectedCallback () {
                 this.onDestroy && this.onDestroy()
             }
 
-            static get observedAttributes() {
+            static get observedAttributes () {
                 return [ ... new Set(this.props) ]
             }
 
-            attributeChangedCallback(name, oldVal, val) {
+            attributeChangedCallback (name, oldVal, val) {
                 try {
                     val = JSON.parse(val)
                 }
@@ -73,7 +92,7 @@ class Ja {
              *  1) passing non-string/number props to child element
              *  2) rendering custom elements (but only necessary if their name was transformed)
              */
-            parse(strings, ...props) {
+            parse (strings, ...props) {
                 let html = strings[0]
                 const latterStrings = strings.slice(1)
 
@@ -83,7 +102,7 @@ class Ja {
                 return html
             }
 
-            render() {
+            render () {
                 if (this.shade) {
                     this.shade.innerHTML = this.html()
                 } else {
@@ -93,19 +112,7 @@ class Ja {
         }
     }
 
-    static use({
-        type,
-        shaded,
-        props=[],
-        state={},
-        methods={},
-        html,
-        onCreate,
-        onAttach,
-        onDestroy,
-        styles={}
-        }) {
-
+    static use ({ type }) {
         if (this.isValidCustomElemName(type)) {
             const JaCompo = this.getCustomElemClassDefinition()
             Object.assign(JaCompo.prototype, arguments[0])
@@ -115,12 +122,12 @@ class Ja {
     }
 
     // is custom element defined already?
-    static isOpen(component) {
+    static isOpen (component) {
         return !customElements.get(component)
     }
 
     // is name worthy of a custom element?
-    static isValidCustomElemName(name) {
+    static isValidCustomElemName (name) {
         try {
             const cutName = name.split('-')
             const nameValid = this.isOpen(name) && cutName.length > 1 && cutName[0] !== ''
@@ -140,23 +147,23 @@ class Radio {
      * keys: event name
      * value: Set of callbacks
      */
-    constructor() {
+    constructor () {
         this.events = { }
     }
 
-    on(event, callback, context) {
+    on (event, callback, context) {
         this.events[event] = this.events[event] || new Set()
         callback = context ? callback.bind(context) : callback
         this.events[event].add(callback)
     }
 
-    off(event, callback) {
+    off (event, callback) {
         if (this.events[event]) {
             this.events[event].delete(callback)
         }
     }
 
-    trigger(event, data) {
+    trigger (event, data) {
         if (this.events[event]) {
             this.events[event].forEach(fn => fn(data))
         }
@@ -179,26 +186,31 @@ Ja.use({
     type: 'cat-component',
     shaded: true,
     props: [ 'name', 'fur', 'paws' ],
+    watch: {
+        fur () {
+            this.render()
+        },
+    },
     state: {
         hungry: false,
         fur: { white: 50, black: 50 },
     },
     methods: {
-        meow() {
+        meow () {
             JaRadio.trigger('cat:meowed', this)
         }
     },
-    onCreate() {
+    onCreate () {
     },
-    onAttach() {
+    onAttach () {
         this.shade.firstElementChild.addEventListener('click', () => {
             this.meow()
         })
     },
-    onDestroy() {
+    onDestroy () {
         console.log('BYE!')
     },
-    html() {
+    html () {
         return `
             <template>
             <slot name="mcja"></slot>
@@ -224,7 +236,7 @@ Ja.use({
         cats: [],
     },
     methods: {
-        feedCat(cat) {
+        feedCat (cat) {
             const catIdx = this.cats.findIndex(elem => elem.name === cat.name)
             this.cats[catIdx] = cat
 
