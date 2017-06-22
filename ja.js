@@ -1,4 +1,8 @@
 /*
+ * Author: David Itkin
+ */
+
+/*
  * BEGIN Library Code
  */
 class Ja {
