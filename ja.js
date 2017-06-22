@@ -14,8 +14,83 @@ class Ja {
         window.JaRouter = new Router(options)
     }
 
+    static getCustomElemClassDefinition() {
+        return class JaCompo extends HTMLElement {
+            constructor() {
+                super()
+
+                Object.assign(this, this.constructor.prototype)
+
+                // create shadowDOM if privacy enabled
+                if (this.shaded) {
+                    this.shade = this.attachShadow({ mode: 'open' })
+                }
+
+                // transfer over methods
+                Object.assign(this, this.methods)
+
+                // transfer over methods
+                Object.assign(this, this.state)
+
+                // transfer styles
+                Object.keys(this.styles).forEach(styleName => {
+                    this[`${styleName}Style`] = this.styles[styleName]
+                })
+
+                this.render()
+
+                this.onCreate && this.onCreate()
+            }
+
+            connectedCallback() {
+                this.onAttach && this.onAttach()
+            }
+
+            disconnectedCallback() {
+                this.onDestroy && this.onDestroy()
+            }
+
+            static get observedAttributes() {
+                return [ ... new Set(this.props) ]
+            }
+
+            attributeChangedCallback(name, oldVal, val) {
+                try {
+                    val = JSON.parse(val)
+                }
+                catch(e) {
+                }
+
+                this[name] = val
+            }
+
+            /**
+             * To be used when:
+             *  1) passing non-string/number props to child element
+             *  2) rendering custom elements (but only necessary if their name was transformed)
+             */
+            parse(strings, ...props) {
+                let html = strings[0]
+                const latterStrings = strings.slice(1)
+
+                props.forEach((prop, idx) => {
+                    html += `${JSON.stringify(prop)}${latterStrings[idx]}`
+                })
+                return html
+            }
+
+            render() {
+                if (this.shade) {
+                    this.shade.innerHTML = this.html()
+                } else {
+                    this.innerHTML = this.html()
+                }
+            }
+        }
+    }
+
     static use({
-        name,
+        type,
         shaded,
         props=[],
         state={},
@@ -24,90 +99,14 @@ class Ja {
         onCreate,
         onAttach,
         onDestroy,
-        styles={},
-    }) {
+        styles={}
+        }) {
 
-        if (this.isValidCustomElemName(name)) {
-
-            /**
-             * Dynamically generated class based on provided component config
-             */
-            class JaCompo extends HTMLElement {
-                constructor() {
-                    super()
-
-                    Object.assign(this, this.constructor.prototype)
-
-                    // create shadowDOM if privacy enabled
-                    if (this.shaded) {
-                        this.shade = this.attachShadow({ mode: 'open' })
-                    }
-
-                    // transfer over methods
-                    Object.assign(this, this.methods)
-
-                    // transfer over methods
-                    Object.assign(this, this.state)
-
-                    // transfer styles
-                    Object.keys(this.styles).forEach(styleName => {
-                        this[`${styleName}Style`] = this.styles[styleName]
-                    })
-
-                    this.render()
-
-                    this.onCreate && this.onCreate()
-                }
-
-                connectedCallback() {
-                    this.onAttach && this.onAttach()
-                }
-
-                disconnectedCallback() {
-                    this.onDestroy && this.onDestroy()
-                }
-
-                static get observedAttributes() {
-                    return [ ... new Set(props) ]
-                }
-
-                attributeChangedCallback(name, oldVal, val) {
-                    try {
-                        val = JSON.parse(val)
-                    }
-                    catch(e) {
-                    }
-
-                    this[name] = val
-                }
-
-                /**
-                 * To be used when:
-                 *  1) passing non-string/number props to child element
-                 *  2) rendering custom elements (but only necessary if their name was transformed)
-                 */
-                parse(strings, ...props) {
-                    let html = strings[0]
-                    const latterStrings = strings.slice(1)
-
-                    props.forEach((prop, idx) => {
-                        html += `${JSON.stringify(prop)}${latterStrings[idx]}`
-                    })
-                    return html
-                }
-
-                render() {
-                    if (this.shade) {
-                        this.shade.innerHTML = this.html()
-                    } else {
-                        this.innerHTML = this.html()
-                    }
-                }
-            }
-
+        if (this.isValidCustomElemName(type)) {
+            const JaCompo = this.getCustomElemClassDefinition()
             Object.assign(JaCompo.prototype, arguments[0])
 
-            customElements.define(name, JaCompo)
+            customElements.define(type, JaCompo)
         }
     }
 
@@ -117,7 +116,7 @@ class Ja {
     }
 
     // is name worthy of a custom element?
-    static ensureCustomElemName(name) {
+    static isValidCustomElemName(name) {
         try {
             const cutName = name.split('-')
             const nameValid = this.isOpen(name) && cutName.length > 1 && cutName[0] !== ''
@@ -125,7 +124,7 @@ class Ja {
             return nameValid
         }
         catch (e) {
-            console.err('Please specify a name for your component in format "a-b"')
+            console.error('Please specify a name for your component in format "a-b"')
             return false
         }
     }
@@ -173,7 +172,7 @@ class Router {
 Ja.startRadio()
 
 Ja.use({
-    type: 'cat',
+    type: 'cat-component',
     shaded: true,
     props: [ 'name', 'fur', 'paws' ],
     state: {
@@ -195,9 +194,16 @@ Ja.use({
     onDestroy() {
         console.log('BYE!')
     },
-    html() { return `
-        <div style=${this.mainStyle()} name=${this.name}>${this.name}</div>
-    `},
+    html() {
+        return `
+            <template>
+            <slot name="mcja"></slot>
+            </template>
+        `
+        //return `
+        //<div style=${this.mainStyle()} name=${this.name}>${this.name}</div>
+        //`
+    },
     styles: {
         main: () => (`"
             color: red;
@@ -240,10 +246,10 @@ Ja.use({
         })
         this.state.cats.forEach(cat => {
             htmlString += `
-                <cat style=${this.penStyle()}
+                <cat-component style=${this.penStyle()}
                 ${cat.hungry ? 'hungry' : ''}
                 fur=${cat.fur}>
-                </cat>
+                </cat-component>
             `
         })
         htmlString += '</div>'
