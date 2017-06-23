@@ -50,15 +50,16 @@ class Ja {
             }
 
             defineProps () {
-                Object.keys(this.watch).forEach(propName => {
+                this.watch && Object.keys(this.watch).forEach(propName => {
                     this[`_${propName}`] = this[propName]
 
                     Object.defineProperty(this, propName, {
-                        get() {
+                        get: function() {
                             return this[`_${propName}`]
                         },
-                        set(val) {
+                        set: function(val) {
                             this[`_${propName}`] = val
+                            // call the function specified for watch
                             this.watch[propName].call(this)
                         },
                     })
@@ -203,22 +204,18 @@ Ja.use({
     onCreate () {
     },
     onAttach () {
-        this.shade.firstElementChild.addEventListener('click', () => {
-            this.meow()
-        })
+        this.shade.firstElementChild.addEventListener('click', this.meow)
     },
     onDestroy () {
         console.log('BYE!')
     },
     html () {
         return `
-            <template>
-            <slot name="mcja"></slot>
-            </template>
+            <div style=${this.mainStyle()}
+                name=${this.name}>
+                ${this.name}
+            </div>
         `
-        //return `
-        //<div style=${this.mainStyle()} name=${this.name}>${this.name}</div>
-        //`
     },
     styles: {
         main: () => (`"
@@ -233,7 +230,12 @@ Ja.use({
     type: 'play-pen',
     shaded: true,
     state: {
-        cats: [],
+        cats: [ { name: 'feona' } ],
+    },
+    watch: {
+        cats() {
+            this.render()
+        },
     },
     methods: {
         feedCat (cat) {
@@ -251,20 +253,13 @@ Ja.use({
     },
     html() {
         let htmlString = `<div style=${this.penStyle()}>`
-        this.state.cats.forEach(cat => {
-            htmlString += `
-                <p style=${this.fedStyle()}>
-                    ${cat.name}
-                    ${cat.fur}
-                    <br>
-                </p>
-            `
-        })
-        this.state.cats.forEach(cat => {
+
+        this.cats.forEach(cat => {
             htmlString += `
                 <cat-component style=${this.penStyle()}
                 ${cat.hungry ? 'hungry' : ''}
-                fur=${cat.fur}>
+                fur=${cat.fur}
+                name=${cat.name}>
                 </cat-component>
             `
         })
